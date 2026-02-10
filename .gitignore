@@ -1,0 +1,4 @@
+.*
+target
+!.gitignore
+dependency-reduced-pom.xml
