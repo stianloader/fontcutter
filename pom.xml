@@ -127,6 +127,7 @@
                                 <buildArg>-march=x86-64-v3</buildArg>
                                 <buildArg>-R:MaxHeapSize=256M</buildArg>
                                 <buildArg>--enable-native-access=ALL-UNNAMED</buildArg>
+                                <buildArg>-H:IncludeResourceBundles=joptsimple.HelpFormatterMessages,joptsimple.ExceptionMessages</buildArg>
                             </buildArgs>
                             <agent>
                                 <enabled>true</enabled>

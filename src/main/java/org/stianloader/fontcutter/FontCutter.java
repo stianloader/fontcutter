@@ -42,6 +42,7 @@ import org.stianloader.picoresolve.version.MavenVersion;
 import xmlparser.XmlParser;
 import xmlparser.model.XmlElement;
 
+import joptsimple.HelpFormatter;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
@@ -493,6 +494,14 @@ public class FontCutter {
     }
 
     public static void main(String[] args) {
+        try {
+            FontCutter.mainApp(args);
+        } catch (Throwable t) {
+            LoggerFactory.getLogger(FontCutter.class).error("Application terminated exceptionally", t);
+        }
+    }
+
+    public static void mainApp(String[] args) {
         URI remoteURI;
         Path repositoryPath;
         String groupId;
@@ -515,14 +524,34 @@ public class FontCutter {
             OptionSpec<@NotNull String> groupIdSpec = parser.accepts("groupId", "Deployment group ID")
                     .withRequiredArg()
                     .defaultsTo("org.stianloader.fonts")
-                    .ofType(String.class);
+                    .withValuesConvertedBy(new NotNullStringConverter());
 
             OptionSpec<@NotNull String> projectURLSpec = parser.accepts("projectURL", "Project URL to use in POM files")
                     .withRequiredArg()
                     .defaultsTo("https://github.com/stianloader/fontcutter")
-                    .ofType(String.class);
+                    .withValuesConvertedBy(new NotNullStringConverter());
+
+            parser.accepts("help", "Print more information about arguments").forHelp();
+
+            if (args.length == 0) {
+                try {
+                    parser.printHelpOn(System.err);
+                    return;
+                } catch (IOException e) {
+                    throw new AssertionError(e);
+                }
+            }
 
             OptionSet options = parser.parse(args);
+
+            if (options.has("help")) {
+                try {
+                    parser.printHelpOn(System.err);
+                    return;
+                } catch (IOException e) {
+                    throw new AssertionError(e);
+                }
+            }
 
             remoteURI = options.valueOf(remoteURISpec);
             repositoryPath = options.valueOf(repositoryPathSpec);
