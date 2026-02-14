@@ -42,7 +42,6 @@ import org.stianloader.picoresolve.version.MavenVersion;
 import xmlparser.XmlParser;
 import xmlparser.model.XmlElement;
 
-import joptsimple.HelpFormatter;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
@@ -238,6 +237,10 @@ public class FontCutter {
             }
 
             for (FontFile file : deploymentFiles) {
+                if (!file.fontName().equalsIgnoreCase(artifactId)) {
+                    throw new AssertionError("mismatch between " + file.fontName() + " and " + artifactId);
+                }
+
                 String nameSpec = "/" + file.fontName().toLowerCase(Locale.ROOT) + "-" + file.classifier() + "." + file.extension();
                 zipOut.putNextEntry(new ZipEntry(nameSpec));
                 try (InputStream rawIn = Files.newInputStream(file.path())) {
@@ -256,6 +259,8 @@ public class FontCutter {
     @NotNull
     private static Map.Entry<@NotNull Publishable, DigestValues> genPOM(@NotNull String groupId, @NotNull String artifactId, @NotNull String version, @NotNull String pomURL, @NotNull FontFile licenseFile) {
         Map<String, String> rootAttributes = new HashMap<>();
+        rootAttributes.put("xmlns", "http://maven.apache.org/POM/4.0.0");
+        rootAttributes.put("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
         rootAttributes.put("xsi:schemaLocation", "http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd");
         XmlElement pomRoot = new XmlElement(null, "project", rootAttributes);
         {
@@ -402,7 +407,7 @@ public class FontCutter {
         }
 
         XmlParser parser = XmlParser.newXmlParser().escapeXml().charset(StandardCharsets.UTF_8).shouldPrettyPrint().build();
-        final byte @NotNull[] pomData = parser.domToXml(pomRoot).getBytes(StandardCharsets.UTF_8);
+        final byte @NotNull[] pomData = ("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>" + parser.domToXml(pomRoot)).getBytes(StandardCharsets.UTF_8);
 
         return Map.entry(new BytePublishable(pomData), FontCutter.loadHashes(pomData));
     }
@@ -461,6 +466,32 @@ public class FontCutter {
         }
 
         return appVersion;
+    }
+
+    private static boolean isFileMissing(@NotNull HttpClient client, @NotNull URI remoteURI, @NotNull String groupId, @NotNull String artifactId, @NotNull String version, @Nullable String classifier, @NotNull String extension) {
+        String baseName = artifactId;
+        if (classifier != null) {
+            baseName += "-" + classifier;
+        }
+        baseName += "-" + version + "." + extension;
+
+        URI resolvedURI = remoteURI.resolve(groupId.replace('.', '/') + "/" + artifactId + "/" + version + "/" + baseName);
+
+        try {
+            HttpResponse<Void> response = client.send(HttpRequest.newBuilder(resolvedURI).build(), BodyHandlers.discarding());
+
+            if (response.statusCode() == 404) {
+                return true;
+            } else if (response.statusCode() == 200) {
+                return false;
+            } else {
+                LoggerFactory.getLogger(FontCutter.class).warn("Recieved status code {} for URI {}", response.statusCode(), resolvedURI);
+                return false;
+            }
+        } catch (IOException | InterruptedException e) {
+            LoggerFactory.getLogger(FontCutter.class).error("IO exception whilst performing HTTP requests", e);
+            return false;
+        }
     }
 
     @NotNull
@@ -643,7 +674,6 @@ public class FontCutter {
             throw new AssertionError();
         });
 
-        AtomicReference<String> deploymentArtifactId = new AtomicReference<>("");
         Map<GAVCE, Map.Entry<Publishable, DigestValues>> deploymentFiles = new HashMap<>();
         AtomicBoolean requireDeployment = new AtomicBoolean();
         AtomicReference<@Nullable String> latestVersion = new AtomicReference<>(null);
@@ -654,16 +684,24 @@ public class FontCutter {
         deployableFiles.forEach((ace, fontFile) -> {
             DigestValues digest = FontCutter.loadHashes(fontFile.path());
             GAVCE baseGAVCE = new GAVCE(groupId, ace.artifactId(), version, ace.classifier(), ace.extension());
+            FontACE lastACERef = lastACE.get();
 
-            if (!ace.artifactId().equals(deploymentArtifactId.getPlain())) {
+            if (lastACERef == null || !ace.artifactId().equals(lastACERef.artifactId())) {
                 if (requireDeployment.getPlain()) {
-                    FontCutter.deploy(licenseFiles, ace, groupId, version, deploymentFiles, projectURL, client, remoteURI);
+                    if (lastACERef == null) {
+                        throw new AssertionError("Attempting to deploy nothing?");
+                    }
+                    FontCutter.deploy(licenseFiles, lastACERef, groupId, version, deploymentFiles, projectURL, client, remoteURI);
                 }
                 deploymentFiles.clear();
-                deploymentArtifactId.setPlain(ace.artifactId());
                 requireDeployment.setPlain(false);
                 MavenVersion remoteLatestVersion = FontCutter.getLatestVersion(client, remoteURI, baseGAVCE);
                 latestVersion.setPlain(remoteLatestVersion == null ? null : remoteLatestVersion.getOriginText());
+
+                if (remoteLatestVersion != null
+                        && FontCutter.isFileMissing(client, remoteURI, groupId, ace.artifactId(), remoteLatestVersion.getOriginText(), null, "pom.md5")) {
+                    requireDeployment.setPlain(true);
+                }
             }
 
             deploymentFiles.put(baseGAVCE, Map.entry(fontFile, digest));
