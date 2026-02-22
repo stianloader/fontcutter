@@ -204,21 +204,21 @@ public class FontCutter {
         try (ZipOutputStream zipOut = new ZipOutputStream(baos, StandardCharsets.UTF_8)) {
             zipOut.setLevel(9);
 
-            zipOut.putNextEntry(new ZipEntry("/META-INF/"));
-            zipOut.putNextEntry(new ZipEntry("/META-INF/LICENSES/"));
-            zipOut.putNextEntry(new ZipEntry("/META-INF/LICENSES/" + artifactId + "/"));
-            zipOut.putNextEntry(new ZipEntry("/META-INF/LICENSES/" + artifactId + "/LICENSE"));
+            zipOut.putNextEntry(new ZipEntry("META-INF/"));
+            zipOut.putNextEntry(new ZipEntry("META-INF/LICENSES/"));
+            zipOut.putNextEntry(new ZipEntry("META-INF/LICENSES/" + artifactId + "/"));
+            zipOut.putNextEntry(new ZipEntry("META-INF/LICENSES/" + artifactId + "/LICENSE"));
             try (InputStream rawIn = Files.newInputStream(licenseFile)) {
                 rawIn.transferTo(zipOut);
             }
             zipOut.closeEntry();
 
-            zipOut.putNextEntry(new ZipEntry("/META-INF/maven/"));
-            zipOut.putNextEntry(new ZipEntry("/META-INF/maven/" + groupId + "/"));
-            zipOut.putNextEntry(new ZipEntry("/META-INF/maven/" + groupId + "/" + artifactId + "/"));
+            zipOut.putNextEntry(new ZipEntry("META-INF/maven/"));
+            zipOut.putNextEntry(new ZipEntry("META-INF/maven/" + groupId + "/"));
+            zipOut.putNextEntry(new ZipEntry("META-INF/maven/" + groupId + "/" + artifactId + "/"));
 
             {
-                zipOut.putNextEntry(new ZipEntry("/META-INF/maven/" + groupId + "/" + artifactId + "/pom.properties"));
+                zipOut.putNextEntry(new ZipEntry("META-INF/maven/" + groupId + "/" + artifactId + "/pom.properties"));
                 // Using Properties violates reproducible builds but I also don't want to mess up random stuff like Unicode escaping,
                 // so yeah. Reproducible build verification should probably ignore file metadata anyways
                 Properties pomProperties = new Properties();
@@ -231,7 +231,7 @@ public class FontCutter {
             }
 
             {
-                zipOut.putNextEntry(new ZipEntry("/META-INF/maven/" + groupId + "/" + artifactId + "/pom.xml"));
+                zipOut.putNextEntry(new ZipEntry("META-INF/maven/" + groupId + "/" + artifactId + "/pom.xml"));
                 pomFile.asInputStream().transferTo(zipOut);
                 zipOut.closeEntry();
             }
@@ -241,7 +241,7 @@ public class FontCutter {
                     throw new AssertionError("mismatch between " + file.fontName() + " and " + artifactId);
                 }
 
-                String nameSpec = "/" + file.fontName().toLowerCase(Locale.ROOT) + "-" + file.classifier() + "." + file.extension();
+                String nameSpec = file.fontName().toLowerCase(Locale.ROOT) + "-" + file.classifier() + "." + file.extension();
                 zipOut.putNextEntry(new ZipEntry(nameSpec));
                 try (InputStream rawIn = Files.newInputStream(file.path())) {
                     rawIn.transferTo(zipOut);
